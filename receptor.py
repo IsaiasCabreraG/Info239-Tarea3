@@ -17,29 +17,29 @@ def envioConError(paquete: bytearray, cliente: socket.socket):
     # no enviar, enviar repetidamente, cambiar bit
     # Probabilidades de error:
     prob_no = 0.0  # Probabilidad de no enviar
-    prob_repetir = 0.0 # Probabilidad de enviar repetidamente
+    prob_timeout = 0.1 # Probabilidad de enviar repetidamente
     prob_cambio = 0.0  # Probabilidad de cambio de bit
     if random.random() < prob_no:
-        print("No se envió el paquete.")
         printByteArray(paquete)
+        print("\033[91m[Paquete Perdido].\033[0m")
         return 
-    elif random.random() < prob_repetir:
-        print("Enviando el paquete dos vezes.")
-        cliente.send(paquete)
-        cliente.send(paquete)
+    elif random.random() < prob_timeout:
         printByteArray(paquete)
+        print("Timeout Prematuro.")
+        time.sleep(1.2)
+        cliente.send(paquete)
         return 
     elif random.random() < prob_cambio:
-        print("Cambiando un bit del paquete.")
+        printByteArray(paquete)
+        print("\033[91m[Paquete Corrupto (bit cambiado)]\033[0m")
         # Cambiar un bit aleatorio en el paquete
         index = random.randint(0, len(paquete) - 1)
         paquete[index] ^= 0x01
         cliente.send(paquete)
-        printByteArray(paquete)
         return
     
     printByteArray(paquete)
-    print()
+    # print()
     cliente.send(paquete)
     return
 
@@ -130,7 +130,7 @@ def verificarPaquete(paquete, secuenciaEsperada) -> bool:
         return False
     if int(paquete[0]) != secuenciaEsperada:
         enviarAck(True, conexion, paquete[0])
-        print(f"Paquete con secuencia {paquete[0]} ya recibido, enviando ACK.")
+        print(f"Paquete con secuencia {paquete[0]} duplicado, enviando ACK.")
         return False
     print(f"Paquete con secuencia {paquete[0]} recibido correctamente.")
     return True

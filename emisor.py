@@ -29,13 +29,14 @@ def envioConError(paquete: bytearray, cliente: socket.socket):
     # Probabilidades de error:
     prob_no = 0.0  # Probabilidad de no enviar
     prob_repetir = 0.0  # Probabilidad de enviar repetidamente
-    prob_cambio = 0.1  # Probabilidad de cambio de bit
+    prob_cambio = 0.0  # Probabilidad de cambio de bit
     if random.random() < prob_no:
         print("\033[91m[Paquete Perdido].\033[0m")
         return 
     elif random.random() < prob_repetir:
         print("Enviando el paquete dos vezes.")
         cliente.send(paquete)
+        time.sleep(0.001)
         cliente.send(paquete)
         return 
     elif random.random() < prob_cambio:
@@ -55,19 +56,24 @@ def envioConError(paquete: bytearray, cliente: socket.socket):
 def enviarPaquete(cliente, paquete):
     """Envía el paquete al servidor y espera confirmación."""
     confirmacion = False
+    secuencia_inc = False
     while not confirmacion:
         copiaPaquete = bytearray(paquete)  # Hacer una copia del paquete
-        envioConError(copiaPaquete, cliente)
+        if(not secuencia_inc):
+            envioConError(copiaPaquete, cliente)
         try:
             respuesta = cliente.recv(1024)
             respuesta = bytes(respuesta) # Eliminar espacios en blanco
-            if verAck(respuesta, paquete[0]):
+            aux = verAck(respuesta, paquete[0])
+            if aux == 1:
                 confirmacion = True
+            if aux == 2:
+                secuencia_inc = True
         except socket.timeout:
             print("\033[38;5;220mNo se recibió ACK, enviando mensaje nuevamente.\033[0m")
 
 
-def verAck(respuesta:bytearray, secuencia:int)-> bool:
+def verAck(respuesta:bytearray, secuencia:int)-> int:
     """Verifica si la respuesta es un ACK."""
     #fomato de ACK:[secuencia, ACKx1, crc1x2] :4, 00000000 si es ACK, 00000001 si es NUK
     # printByteArray(respuesta)
@@ -79,15 +85,17 @@ def verAck(respuesta:bytearray, secuencia:int)-> bool:
         if respuesta[0] == secuencia and respuesta[1] == 1:
             print(f"ACK recibido para el paquete con secuencia {secuencia}: ", end=' ')
             printByteArray(respuesta)
-            # print("ACK recibido.")
-            return True
+            return 1
         if respuesta[0] == secuencia and respuesta[1] == 0:
             print(f"NAK recibido para el paquete con secuencia {secuencia}: ", end=' ')
             printByteArray(respuesta)
-            # print("NAK recibido.")
-            return False
-    print("ACK no recibido o incorrecto.")
-    return False
+            return 0
+        else:
+            print("\033[91mConfirmación con secuencia incorrecta: \033[0m", respuesta[0])
+            return 2
+    else:
+        print("\033[91mConfirmación con CRC incorrecto.\033[0m")
+    return 0
 
 
 def printByteArray(byte_array):
@@ -162,7 +170,7 @@ if __name__ == "__main__":
             cliente.connect(("127.0.0.1", 12345))
             print("Conexión exitosa al servidor.")
             print()
-            cliente.settimeout(5) 
+            cliente.settimeout(1) 
             break
         except ConnectionRefusedError:
             print("Receptor no disponible. Reintentando en 2 segundos...")
