@@ -106,7 +106,7 @@ def printByteArray(byte_array):
 
 def packager(secuencia, paquete, finpaquete):
     """Empaqueta los datos en un formato específico."""
-    paquete[0] = secuencia  # Número de secuencia
+    paquete[0] = secuencia%255  # Número de secuencia
     paquete[NUM_BYTES+1] = finpaquete  # Indicador de fin de paquete
 
 def verificarCrc16Ibm(paquete: bytearray) -> bool:
@@ -157,7 +157,7 @@ def calcularCrc16Ibm(paquete: bytearray) -> None:
 if __name__ == "__main__":
     # formato bytearray [seccuencia, datos x 3, longitud, finpaquete, crc1x2]:8
     #fomato de ACK:[secuencia, ACKx1, crc1x2] :4, 00000001 si es ACK, 00000000 si es NUK
-    datos_enviar = bytearray("Osvaldo Casas-Cordero, hola, feliz navidad", 'utf-8')
+    datos_enviar = bytearray("La vida avanza como un rio que no se detiene, fluye por caminos diversos, algunos suaves, otros complejos, pero siempre sigue. A veces parece clara, otras veces es bruma, duda, eco de algo que escapa a la comprension. Cada jornada es una suma de hechos, de pasos dados, de rostros vistos, de palabras dichas o guardadas. Lo curioso es que, incluso en los dias grises, algo dentro de cada ser empuja hacia el alba, hacia la esperanza, hacia la idea de que todo puede ser distinto, de que hay valor en seguir, en mirar al cielo, en cruzar el umbral de lo conocido. Es ese impulso leve pero firme el que marca la diferencia, el que hace que uno respire hondo y diga: sigo aqui, con miedo tal vez, pero firme, vivo, real. Y en ese acto simple se encierra el milagro, la fuerza de la vida misma, que no se mide por lo grande, sino por lo sincero, por lo que habita en lo profundo del alma.", 'utf-8')
     paquete = bytearray(5 + NUM_BYTES)  # cabecera (5) + datos (NUM_BYTES)
     sec = 0
     finpaquete = 0

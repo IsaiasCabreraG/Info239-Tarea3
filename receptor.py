@@ -156,6 +156,7 @@ if __name__ == "__main__":
     buffer = ""
     
     while True:
+        secuenciaEsperada = secuenciaEsperada%255
         paquete = conexion.recv(1024)
         if not paquete:
             print("Conexión cerrada por el cliente.")
