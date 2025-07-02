@@ -1,11 +1,12 @@
 import socket
 import time
+import random
 
 # Definir una clave de cifrado
 CLAVE = bytearray([0x12])
 NUM_BYTES = 3  # Número de bytes a enviar en cada paquete
 
-def data_extractor(datos_enviar, paquete, secuencia):
+def dataExtractor(datos_enviar, paquete, secuencia):
     """Extrae los datos a enviar y los coloca en el paquete."""
     inicio = secuencia * NUM_BYTES
     finpaquete = 0
@@ -22,44 +23,110 @@ def cifrar(paquete: bytearray, clave: bytearray):
     for i in range(NUM_BYTES):
         paquete[i+1] ^= clave[0]
 
-def enviar_paquete(cliente, paquete):
+def envioConError(paquete: bytearray, cliente: socket.socket):
+    """Simula un error en el envío del paquete."""
+    # no enviar, enviar repetidamente, cambiar bit
+    # Probabilidades de error:
+    prob_no = 0.0  # Probabilidad de no enviar
+    prob_repetir = 0.0  # Probabilidad de enviar repetidamente
+    prob_cambio = 0.1  # Probabilidad de cambio de bit
+    if random.random() < prob_no:
+        print("\033[91m[Paquete Perdido].\033[0m")
+        return 
+    elif random.random() < prob_repetir:
+        print("Enviando el paquete dos vezes.")
+        cliente.send(paquete)
+        cliente.send(paquete)
+        return 
+    elif random.random() < prob_cambio:
+        print("\033[91m[Paquete Corrupto (bit cambiado)]\033[0m")
+        # Cambiar un bit aleatorio en el paquete
+        index = random.randint(0, len(paquete) - 1)
+        paquete[index] ^= 0x01
+        cliente.send(paquete)
+        return
+
+    print("Enviando el paquete sin errores.")
+    # printByteArray(paquete)
+    # print("\n\n")
+    cliente.send(paquete)
+    return
+
+def enviarPaquete(cliente, paquete):
     """Envía el paquete al servidor y espera confirmación."""
     confirmacion = False
-    printByteArray(paquete)
     while not confirmacion:
-        cliente.send(paquete)
+        copiaPaquete = bytearray(paquete)  # Hacer una copia del paquete
+        envioConError(copiaPaquete, cliente)
         try:
             respuesta = cliente.recv(1024)
             respuesta = bytes(respuesta) # Eliminar espacios en blanco
-            if ver_ack(respuesta):
+            if verAck(respuesta, paquete[0]):
                 confirmacion = True
-            print("Recibido:", respuesta)
         except socket.timeout:
-            print("No se recibió ACK, enviando mensaje nuevamente.")
+            print("\033[38;5;220mNo se recibió ACK, enviando mensaje nuevamente.\033[0m")
 
-def ver_ack(respuesta):
+
+def verAck(respuesta:bytearray, secuencia:int)-> bool:
     """Verifica si la respuesta es un ACK."""
-    if respuesta == b'ACK':
-        print("ACK recibido.")
-        return True
-    else:
-        print("ACK no recibido.")
-        return False
+    #fomato de ACK:[secuencia, ACKx1, crc1x2] :4, 00000000 si es ACK, 00000001 si es NUK
+    # printByteArray(respuesta)
+    print()
+ 
+    print("Confirmación Recibida!")
+    if verificarCrc16Ibm(respuesta):
+        print("\033[92mCRC-16-IBM verificado correctamente.\033[0m")
+        if respuesta[0] == secuencia and respuesta[1] == 1:
+            print(f"ACK recibido para el paquete con secuencia {secuencia}: ", end=' ')
+            printByteArray(respuesta)
+            # print("ACK recibido.")
+            return True
+        if respuesta[0] == secuencia and respuesta[1] == 0:
+            print(f"NAK recibido para el paquete con secuencia {secuencia}: ", end=' ')
+            printByteArray(respuesta)
+            # print("NAK recibido.")
+            return False
+    print("ACK no recibido o incorrecto.")
+    return False
+
 
 def printByteArray(byte_array):
     """Imprime el contenido de un bytearray en formato decimal."""
-    print("Contenido del bytearray:")
     for byte in byte_array:
         print(f"{byte:03d}", end=' ')
     print()  # Nueva línea al final
 
-def packager(secuencia, paquete, longitud, finpaquete):
+def packager(secuencia, paquete, finpaquete):
     """Empaqueta los datos en un formato específico."""
     paquete[0] = secuencia  # Número de secuencia
-    paquete[NUM_BYTES+1] = longitud  # Longitud del mensaje
-    paquete[NUM_BYTES+2] = finpaquete  # Indicador de fin de paquete
+    paquete[NUM_BYTES+1] = finpaquete  # Indicador de fin de paquete
 
-def calcular_crc16_ibm(paquete: bytearray) -> None:
+def verificarCrc16Ibm(paquete: bytearray) -> bool:
+    """
+    Verifica si el CRC-16-IBM de un paquete es correcto.
+    Calcula el CRC sobre todos los bytes excepto los últimos 2 (que contienen el CRC esperado),
+    y compara si coincide.
+    """
+    if len(paquete) < 3:
+        return False  # No hay suficientes bytes para datos + CRC
+
+    crc = 0x0000  # <- mismo valor inicial que en calcularCrc16Ibm
+
+    for byte in paquete[:-2]:  # Excluye los últimos dos bytes
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x0001:
+                crc = (crc >> 1) ^ 0xA001
+            else:
+                crc >>= 1
+        crc &= 0xFFFF
+
+    # Obtener CRC esperado desde los últimos dos bytes (formato little-endian)
+    crc_esperado = paquete[-2] | (paquete[-1] << 8)
+
+    return crc == crc_esperado
+
+def calcularCrc16Ibm(paquete: bytearray) -> None:
     """
     Calcula el CRC-16-IBM sobre paquete[:-2] y lo guarda en paquete[-2:].
     El paquete debe tener al menos 2 bytes reservados al final.
@@ -80,11 +147,11 @@ def calcular_crc16_ibm(paquete: bytearray) -> None:
     paquete[-2:] = crc.to_bytes(2, byteorder='little')  # Guardamos el CRC en el mismo paquete
 
 if __name__ == "__main__":
-    # formato bytearray [seccuencia, datos x 3, longitud, finpaquete, crc1x2]
-    datos_enviar = bytearray("iashfdioahs", 'utf-8')
+    # formato bytearray [seccuencia, datos x 3, longitud, finpaquete, crc1x2]:8
+    #fomato de ACK:[secuencia, ACKx1, crc1x2] :4, 00000001 si es ACK, 00000000 si es NUK
+    datos_enviar = bytearray("Osvaldo Casas-Cordero, hola, feliz navidad", 'utf-8')
     paquete = bytearray(5 + NUM_BYTES)  # cabecera (5) + datos (NUM_BYTES)
     sec = 0
-    lon = len(datos_enviar)
     finpaquete = 0
 
     # # Crear socket TCP
@@ -94,21 +161,24 @@ if __name__ == "__main__":
         try:
             cliente.connect(("127.0.0.1", 12345))
             print("Conexión exitosa al servidor.")
+            print()
             cliente.settimeout(5) 
             break
         except ConnectionRefusedError:
             print("Receptor no disponible. Reintentando en 2 segundos...")
             time.sleep(2)
-    for i in range(0, len(datos_enviar), 3):
-        finpaquete = data_extractor(datos_enviar, paquete, sec)
-        printByteArray(paquete)
+
+    for i in range(0, len(datos_enviar), NUM_BYTES):
+        finpaquete = dataExtractor(datos_enviar, paquete, sec)
+        # print("Paquete con datos:")
+        # printByteArray(paquete)
         cifrar(paquete, CLAVE)
-        printByteArray(paquete)
-        packager(sec, paquete, lon, finpaquete)
-        calcular_crc16_ibm(paquete)
+        packager(sec, paquete, finpaquete)
+        calcularCrc16Ibm(paquete)
+        print(f"Paquete numero {sec} a enviar:")
         printByteArray(paquete)
 
-        enviar_paquete(cliente, paquete)
+        enviarPaquete(cliente, paquete)
         sec += 1
         print("\n\n")
 
