@@ -16,9 +16,9 @@ def envioConError(paquete: bytearray, cliente: socket.socket):
     """Simula un error en el envío del paquete."""
     # no enviar, enviar repetidamente, cambiar bit
     # Probabilidades de error:
-    prob_no = 0.0  # Probabilidad de no enviar
-    prob_timeout = 0.1 # Probabilidad de enviar repetidamente
-    prob_cambio = 0.0  # Probabilidad de cambio de bit
+    prob_no = 0.01  # Probabilidad de no enviar
+    prob_timeout = 0.01 # Probabilidad de enviar repetidamente
+    prob_cambio = 0.01  # Probabilidad de cambio de bit
     if random.random() < prob_no:
         printByteArray(paquete)
         print("\033[91m[Paquete Perdido].\033[0m")
